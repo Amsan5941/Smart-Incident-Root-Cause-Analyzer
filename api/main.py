@@ -71,7 +71,8 @@ async def startup():
     if seed_path and os.path.exists(seed_path):
         count = await load_training_data(seed_path)
         if count:
-            logger.info(f"Seeded {count} training incidents into MongoDB")
+            target = "in-memory store" if os.environ.get("USE_INMEMORY_DB", "0").lower() in ("1", "true", "yes") else "MongoDB"
+            logger.info(f"Seeded {count} training incidents into {target}")
 
     logger.info("API ready.")
 
@@ -176,6 +177,15 @@ async def notify_slack(result: dict, service: str, request_id: str):
 
 @app.get("/health", tags=["System"])
 async def health(db: AsyncIOMotorDatabase = Depends(get_db)):
+    if os.environ.get("USE_INMEMORY_DB", "0").lower() in ("1", "true", "yes"):
+        return {
+            "status": "ok",
+            "timestamp": datetime.utcnow().isoformat(),
+            "database": "in_memory",
+            "model_type": os.environ.get("MODEL_TYPE", "claude"),
+            "version": "1.0.0",
+        }
+
     try:
         await db.command("ping")
         db_status = "ok"
