@@ -65,15 +65,19 @@ app.add_middleware(
 @app.on_event("startup")
 async def startup():
     logger.info("Initialising database indexes...")
-    await init_db()
+    try:
+        await init_db()
+        
+        seed_path = os.environ.get("SEED_DATA_PATH")
+        if seed_path and os.path.exists(seed_path):
+            count = await load_training_data(seed_path)
+            if count:
+                logger.info(f"Seeded {count} training incidents into MongoDB")
+        logger.info("Database initialized successfully.")
+    except Exception as e:
+        logger.warning(f"MongoDB not available ({e}). Running in demo mode without persistence.")
 
-    seed_path = os.environ.get("SEED_DATA_PATH")
-    if seed_path and os.path.exists(seed_path):
-        count = await load_training_data(seed_path)
-        if count:
-            logger.info(f"Seeded {count} training incidents into MongoDB")
-
-    logger.info("API ready.")
+    logger.info("API ready at http://localhost:8000")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
