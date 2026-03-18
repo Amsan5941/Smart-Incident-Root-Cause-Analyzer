@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Incident Root Cause Analyzer</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+
+  <header>
+    <div class="logo">
+      <div class="dot"></div>
+      Incident Analyzer
+    </div>
+    <nav>
+      <a href="#" id="nav-analyze" onclick="showPanel('analyze')">Analyze</a>
+      <a href="#" id="nav-history" onclick="showPanel('history')">History</a>
+      <a href="/docs" target="_blank">API Docs</a>
+    </nav>
+  </header>
+
+  <!-- Stats Bar -->
+  <div style="max-width:1100px;margin:1.5rem auto 0;width:100%;padding:0 1.5rem">
+    <div class="stats-bar" id="stats-bar">
+      <div class="stat-card">
+        <div class="stat-value" id="stat-total">—</div>
+        <div class="stat-label">Total Analyses</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-confidence">—</div>
+        <div class="stat-label">Avg Confidence</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-latency">—</div>
+        <div class="stat-label">Avg Latency (ms)</div>
+      </div>
+      <div class="stat-card">
+        <div class="stat-value" id="stat-accuracy">—</div>
+        <div class="stat-label">Feedback Accuracy</div>
+      </div>
+    </div>
+  </div>
+
+  <main>
+
+    <!-- ── Analyze Panel ───────────────────────────────────────── -->
+    <div id="panel-analyze">
+
+      <div class="card">
+        <div class="card-title">📋 Incident Input</div>
+
+        <div class="form-row">
+          <div class="form-group">
+            <label>Service</label>
+            <input type="text" id="service" placeholder="checkout-service" />
+          </div>
+          <div class="form-group">
+            <label>Severity</label>
+            <select id="severity">
+              <option value="">— select —</option>
+              <option value="critical">Critical</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label>Logs <span style="color:var(--red)">*</span></label>
+          <textarea id="logs" placeholder="[2024-01-15 14:23:45] ERROR checkout-service: Slow request detected..."></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Metrics</label>
+          <textarea id="metrics" placeholder="DB CPU: 98%, Connection pool: 100%, P99 latency: 45000ms"></textarea>
+        </div>
+
+        <div class="form-group">
+          <label>Error Trace / Stack Trace</label>
+          <textarea id="error-trace" placeholder="TimeoutError: request exceeded 45000ms&#10;  at checkout/handlers/checkout.py:142"></textarea>
+        </div>
+
+        <div class="flex-row" style="gap:0.5rem;margin-bottom:0.75rem">
+          <button class="btn btn-ghost" onclick="loadExample('n_plus_one')">N+1 Query</button>
+          <button class="btn btn-ghost" onclick="loadExample('memory_leak')">Memory Leak</button>
+          <button class="btn btn-ghost" onclick="loadExample('disk_full')">Disk Full</button>
+          <button class="btn btn-ghost" onclick="loadExample('circuit_breaker')">Circuit Breaker</button>
+        </div>
+
+        <button class="btn btn-primary" id="analyze-btn" onclick="runAnalysis()">
+          <span class="spinner" id="spinner"></span>
+          <span class="btn-text">⚡ Analyze Incident</span>
+        </button>
+      </div>
+
+    </div><!-- /panel-analyze -->
+
+    <!-- ── Result Panel ────────────────────────────────────────── -->
+    <div id="panel-result">
+
+      <div class="card" id="result-card">
+        <div class="card-title">🔍 Analysis Result</div>
+
+        <div id="result-empty" class="result-empty">
+          <span class="icon">🔍</span>
+          Paste incident logs and hit <strong>Analyze</strong> to identify the root cause.
+        </div>
+
+        <div id="result-content" style="display:none">
+
+          <div class="result-section">
+            <div class="result-label">Root Cause</div>
+            <div class="root-cause-text" id="res-root-cause"></div>
+            <div class="confidence-row">
+              <div class="confidence-bar-wrap">
+                <div class="confidence-bar-fill" id="conf-bar" style="width:0%"></div>
+              </div>
+              <div class="confidence-value" id="conf-value">0%</div>
+            </div>
+          </div>
+
+          <div class="flex-row" style="margin-bottom:1rem;gap:0.5rem">
+            <span class="badge" id="res-category"></span>
+            <span class="badge" id="res-severity"></span>
+            <span class="spacer"></span>
+            <span style="font-size:0.75rem;color:var(--text-muted)" id="res-time"></span>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="result-section">
+            <div class="result-label">Resolution Steps</div>
+            <ol class="fix-steps" id="res-steps"></ol>
+          </div>
+
+          <div id="similar-section" style="display:none">
+            <div class="divider"></div>
+            <div class="result-section">
+              <div class="result-label">Similar Past Incidents</div>
+              <div class="similar-list" id="res-similar"></div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="flex-row" style="gap:0.5rem">
+            <span style="font-size:0.75rem;color:var(--text-muted)">Was this helpful?</span>
+            <button class="btn btn-ghost" onclick="submitFeedback(true)">✅ Correct</button>
+            <button class="btn btn-ghost" onclick="submitFeedback(false)">❌ Wrong</button>
+            <span class="spacer"></span>
+            <span style="font-size:0.7rem;color:var(--text-dim)" id="res-request-id"></span>
+          </div>
+
+        </div>
+      </div>
+
+    </div><!-- /panel-result -->
+
+    <!-- ── History Panel ───────────────────────────────────────── -->
+    <div class="history-panel full-width card" id="panel-history">
+      <div class="card-title">📜 Recent Analyses</div>
+      <div class="history-list" id="history-list">
+        <div style="color:var(--text-dim);text-align:center;padding:2rem">Loading...</div>
+      </div>
+    </div>
+
+  </main>
+</div><!-- /app -->
+
+<script>
+const API = window.location.origin === 'null' || window.location.protocol === 'file:'
+  ? 'http://localhost:8000'
+  : window.location.origin;
+
+let currentRequestId = null;
+
+// ─── Panel switching ────────────────────────────────────────────────────────
+function showPanel(name) {
+  document.getElementById('panel-analyze').style.display = name === 'analyze' ? '' : 'none';
+  document.getElementById('panel-result').style.display = name === 'analyze' ? '' : 'none';
+  const hp = document.getElementById('panel-history');
+  if (name === 'history') {
+    hp.classList.add('visible');
+    loadHistory();
+  } else {
+    hp.classList.remove('visible');
+  }
+}
+
+// ─── Sample data ────────────────────────────────────────────────────────────
+const EXAMPLES = {
+  n_plus_one: {
+    service: 'checkout-service',
+    severity: 'critical',
+    logs: `[2024-01-15 14:23:45] ERROR checkout-service: Slow request detected (path=/api/checkout duration=45000ms)
+[2024-01-15 14:23:45] WARN  db-pool: 248 queries executed in single request
+[2024-01-15 14:23:45] DEBUG ORM: SELECT * FROM orders WHERE id=1; (2ms)
+[2024-01-15 14:23:45] DEBUG ORM: SELECT * FROM orders WHERE id=2; (2ms)
+[2024-01-15 14:23:45] DEBUG ORM: SELECT * FROM orders WHERE id=3; (2ms)
+... (245 more similar queries)
+[2024-01-15 14:23:46] ERROR checkout-service: Request timeout after 45000ms`,
+    metrics: 'DB CPU: 98%, Connection pool: 100% utilised, Query rate: 2500/min, P99 latency: 45000ms, Active connections: 100/100',
+    error_trace: `TimeoutError: request exceeded 45000ms
+  at checkout-service/handlers/checkout.py:142
+  at orm/query.py:89 (execute_query)
+  at orm/relations.py:234 (lazy_load)`,
+  },
+  memory_leak: {
+    service: 'payment-service',
+    severity: 'high',
+    logs: `[2024-01-15 10:15:00] WARN  payment-service: Heap usage at 7400MB (threshold: 6144MB)
+[2024-01-15 10:15:01] WARN  payment-service: GC pause time: 2300ms (full GC triggered)
+[2024-01-15 10:15:02] ERROR payment-service: OutOfMemoryError – Java heap space
+[2024-01-15 10:15:02] ERROR k8s: Pod payment-service-7d9f4b OOMKilled (exit code 137)
+[2024-01-15 10:15:03] INFO  k8s: Restarting pod (restart #8)`,
+    metrics: 'Heap: 7400/8192MB (90%), GC time: 35% CPU, Pod restarts: 8/hour, Memory growth: +150MB/hr',
+    error_trace: `java.lang.OutOfMemoryError: Java heap space
+  at payment.cache.InMemoryCache.put(InMemoryCache.java:89)
+  at payment.handlers.RequestHandler.process(RequestHandler.java:234)
+Caused by: unbounded cache growth (no eviction policy)`,
+  },
+  disk_full: {
+    service: 'api-gateway',
+    severity: 'critical',
+    logs: `[2024-01-16 08:30:00] ERROR api-gateway: Write failed: No space left on device (/var/log)
+[2024-01-16 08:30:01] ERROR postgres: could not write to pg_wal: No space left on device
+[2024-01-16 08:30:02] CRIT  alertmanager: DISK_FULL alert fired for prod-node-03
+[2024-01-16 08:30:03] ERROR api-gateway: Failed to write audit log – disk full`,
+    metrics: 'Disk /var/log: 99% used, Available: 120MB, Log growth: +1.5GB/day, WAL: 25GB',
+    error_trace: `OSError: [Errno 28] No space left on device: '/var/log/api-gateway.log'
+  at api-gateway/logging/file_handler.py:78
+  at logging/handlers.py:120 (emit)`,
+  },
+  circuit_breaker: {
+    service: 'payment-service',
+    severity: 'critical',
+    logs: `[2024-01-17 16:45:00] ERROR payment-service: Timeout calling stripe-api after 30000ms
+[2024-01-17 16:45:01] WARN  payment-service: Circuit breaker HALF-OPEN for stripe-api
+[2024-01-17 16:45:02] ERROR payment-service: stripe-api health check failed (10 consecutive)
+[2024-01-17 16:45:03] WARN  payment-service: Circuit breaker OPEN – failing fast
+[2024-01-17 16:45:04] ERROR payment-service: Request queue depth: 800 (backed up)`,
+    metrics: 'Stripe error rate: 98%, Thread pool: 100% saturated, Checkout success rate: 2%, CB: OPEN',
+    error_trace: `ConnectTimeout: failed to connect to stripe-api:443 after 30000ms
+  at payment-service/clients/stripe.py:89
+  at resilience4j/circuit_breaker.py:234
+  Retry attempts: 3/3 exhausted`,
+  },
+};
+
+function loadExample(name) {
+  const ex = EXAMPLES[name];
+  if (!ex) return;
+  document.getElementById('service').value = ex.service || '';
+  document.getElementById('severity').value = ex.severity || '';
+  document.getElementById('logs').value = ex.logs || '';
+  document.getElementById('metrics').value = ex.metrics || '';
+  document.getElementById('error-trace').value = ex.error_trace || '';
+}
+
+// ─── Analysis ────────────────────────────────────────────────────────────────
+async function runAnalysis() {
+  const logs = document.getElementById('logs').value.trim();
+  if (!logs) {
+    showToast('Please enter incident logs.', 'error');
+    return;
+  }
+
+  const btn = document.getElementById('analyze-btn');
+  btn.classList.add('loading');
+  btn.disabled = true;
+
+  try {
+    const payload = {
+      logs,
+      metrics: document.getElementById('metrics').value.trim() || undefined,
+      error_trace: document.getElementById('error-trace').value.trim() || undefined,
+      service: document.getElementById('service').value.trim() || undefined,
+      severity: document.getElementById('severity').value || undefined,
+    };
+
+    const res = await fetch(`${API}/analyze`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+
+    const data = await res.json();
+    renderResult(data);
+    loadStats();
+  } catch (e) {
+    showToast(`Analysis failed: ${e.message}`, 'error');
+  } finally {
+    btn.classList.remove('loading');
+    btn.disabled = false;
+  }
+}
+
+function renderResult(data) {
+  currentRequestId = data.request_id;
+
+  document.getElementById('result-empty').style.display = 'none';
+  document.getElementById('result-content').style.display = 'block';
+
+  document.getElementById('res-root-cause').textContent = data.root_cause;
+
+  const pct = Math.round(data.confidence * 100);
+  document.getElementById('conf-bar').style.width = pct + '%';
+  document.getElementById('conf-value').textContent = pct + '%';
+
+  document.getElementById('res-category').textContent = data.category.replace(/_/g, ' ');
+
+  const sev = document.getElementById('severity').value;
+  const sevBadge = document.getElementById('res-severity');
+  if (sev) {
+    sevBadge.textContent = sev;
+    sevBadge.className = 'badge ' + sev;
+    sevBadge.style.display = '';
+  } else {
+    sevBadge.style.display = 'none';
+  }
+
+  document.getElementById('res-time').textContent = `⚡ ${data.inference_time_ms}ms`;
+  document.getElementById('res-request-id').textContent = `ID: ${data.request_id.slice(0, 8)}...`;
+
+  // Fix steps
+  const stepsEl = document.getElementById('res-steps');
+  stepsEl.innerHTML = '';
+  (data.fix_steps || []).forEach((step, i) => {
+    const li = document.createElement('li');
+    li.innerHTML = `<span class="fix-step-num">${i + 1}</span><span>${escapeHtml(step)}</span>`;
+    stepsEl.appendChild(li);
+  });
+
+  // Similar incidents
+  const similar = data.similar_incidents || [];
+  const simSec = document.getElementById('similar-section');
+  if (similar.length > 0) {
+    simSec.style.display = '';
+    const simEl = document.getElementById('res-similar');
+    simEl.innerHTML = '';
+    similar.forEach(s => {
+      const div = document.createElement('div');
+      div.className = 'similar-item';
+      div.innerHTML = `<div class="inc-id">${escapeHtml(s.incident_id)}</div>
+        <div class="inc-rc">${escapeHtml(s.root_cause || '')} <span style="color:var(--text-dim)">(${s.service || ''})</span></div>`;
+      simEl.appendChild(div);
+    });
+  } else {
+    simSec.style.display = 'none';
+  }
+}
+
+// ─── Stats ─────────────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const res = await fetch(`${API}/stats`);
+    if (!res.ok) return;
+    const data = await res.json();
+    document.getElementById('stat-total').textContent = data.total_analyses ?? '—';
+    document.getElementById('stat-confidence').textContent =
+      data.avg_confidence ? (data.avg_confidence * 100).toFixed(0) + '%' : '—';
+    document.getElementById('stat-latency').textContent =
+      data.avg_inference_ms ? Math.round(data.avg_inference_ms) : '—';
+    document.getElementById('stat-accuracy').textContent =
+      data.feedback_accuracy ? (data.feedback_accuracy * 100).toFixed(0) + '%' : '—';
+  } catch {}
+}
+
+// ─── History ────────────────────────────────────────────────────────────────
+async function loadHistory() {
+  const el = document.getElementById('history-list');
+  el.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:2rem">Loading...</div>';
+  try {
+    const res = await fetch(`${API}/incidents?page_size=30`);
+    if (!res.ok) throw new Error('Failed to load');
+    const data = await res.json();
+    if (!data.items.length) {
+      el.innerHTML = '<div style="color:var(--text-dim);text-align:center;padding:2rem">No analyses yet.</div>';
+      return;
+    }
+    el.innerHTML = '';
+    data.items.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'history-item';
+      const ago = timeAgo(item.analyzed_at);
+      div.innerHTML = `
+        <span class="hi-service">${escapeHtml(item.service || 'unknown')}</span>
+        <span class="hi-rc">${escapeHtml(item.root_cause || '')}</span>
+        <span class="hi-time">${ago}</span>`;
+      div.onclick = () => loadAnalysis(item.request_id);
+      el.appendChild(div);
+    });
+  } catch (e) {
+    el.innerHTML = `<div style="color:var(--red);text-align:center;padding:1rem">Error: ${e.message}</div>`;
+  }
+}
+
+async function loadAnalysis(requestId) {
+  showPanel('analyze');
+  try {
+    const res = await fetch(`${API}/incidents/${requestId}`);
+    if (!res.ok) return;
+    const data = await res.json();
+    if (data.logs) document.getElementById('logs').value = data.logs;
+    if (data.metrics) document.getElementById('metrics').value = data.metrics || '';
+    if (data.error_trace) document.getElementById('error-trace').value = data.error_trace || '';
+    if (data.service) document.getElementById('service').value = data.service || '';
+    if (data.severity) document.getElementById('severity').value = data.severity || '';
+    renderResult(data);
+  } catch {}
+}
+
+// ─── Feedback ────────────────────────────────────────────────────────────────
+async function submitFeedback(correct) {
+  if (!currentRequestId) return;
+  try {
+    await fetch(`${API}/feedback/${currentRequestId}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ score: correct ? 5 : 1, correct }),
+    });
+    showToast(correct ? '✅ Feedback recorded!' : '❌ Feedback recorded. We\'ll improve!', 'success');
+  } catch (e) {
+    showToast('Failed to submit feedback', 'error');
+  }
+}
+
+// ─── Utilities ───────────────────────────────────────────────────────────────
+function escapeHtml(str) {
+  return (str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+function timeAgo(iso) {
+  const diff = (Date.now() - new Date(iso)) / 1000;
+  if (diff < 60) return `${Math.round(diff)}s ago`;
+  if (diff < 3600) return `${Math.round(diff / 60)}m ago`;
+  if (diff < 86400) return `${Math.round(diff / 3600)}h ago`;
+  return `${Math.round(diff / 86400)}d ago`;
+}
+
+let toastTimer;
+function showToast(msg, type = '') {
+  clearTimeout(toastTimer);
+  const existing = document.querySelector('.toast');
+  if (existing) existing.remove();
+  const toast = document.createElement('div');
+  toast.className = `toast ${type}`;
+  toast.textContent = msg;
+  document.body.appendChild(toast);
+  toastTimer = setTimeout(() => toast.remove(), 4000);
+}
+
+// ─── Init ────────────────────────────────────────────────────────────────────
+loadStats();
+</script>
+</body>
+</html>

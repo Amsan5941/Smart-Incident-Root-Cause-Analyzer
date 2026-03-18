@@ -1,0 +1,48 @@
+# ─── Secrets ──────────────────────────────────────────────────────────────────
+.env
+.env.local
+.env.*.local
+api/.env
+*.pem
+*.key
+secrets/
+
+# ─── Python ───────────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# ─── Model artifacts (large files — store in DO Spaces instead) ───────────────
+train/checkpoints/
+*.bin
+*.safetensors
+*.pt
+*.ckpt
+
+# ─── Generated data (can be re-generated with generate_synthetic_data.py) ──────
+data/training_incidents.jsonl
+data/training_incidents_test.jsonl
+
+# ─── Jupyter ──────────────────────────────────────────────────────────────────
+.ipynb_checkpoints/
+notebooks/*.png
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+*.log
+
+# ─── OS ───────────────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+
+# ─── IDE ──────────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp

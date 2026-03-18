@@ -1,0 +1,89 @@
+##############################################################################
+# Smart Incident Root Cause Analyzer — Full Stack
+# Usage:
+#   docker compose up -d          # Start all services
+#   docker compose logs -f api    # Tail API logs
+#   docker compose down -v        # Tear down + remove volumes
+##############################################################################
+
+version: "3.9"
+
+services:
+
+  # ── PostgreSQL ──────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: incident_analyzer
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redis (optional caching layer) ─────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Incident Analyzer API ───────────────────────────────────────────────────
+  api:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+      args:
+        MODEL_TYPE: ${MODEL_TYPE:-claude}
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@postgres:5432/incident_analyzer
+      MODEL_TYPE: ${MODEL_TYPE:-claude}
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
+      CLAUDE_MODEL: ${CLAUDE_MODEL:-claude-haiku-4-5-20251001}
+      MODEL_CHECKPOINT: /app/checkpoints/final
+      SEED_DATA_PATH: /app/data/training_incidents.jsonl
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL:-}
+      PORT: 8000
+      WORKERS: 2
+    ports:
+      - "8000:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    volumes:
+      # Mount generated training data for DB seeding
+      - ./data:/app/data:ro
+      # Mount model checkpoints (if using fine_tuned mode)
+      - ./train/checkpoints:/app/checkpoints:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 60s
+      retries: 3
+    restart: unless-stopped
+
+  # ── Dashboard (nginx static file server) ───────────────────────────────────
+  dashboard:
+    image: nginx:alpine
+    volumes:
+      - ./dashboard:/usr/share/nginx/html:ro
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "3000:80"
+    depends_on:
+      - api
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
